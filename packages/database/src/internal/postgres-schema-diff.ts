@@ -209,6 +209,21 @@ const constraintSignature = (
   }
 }
 
+// btree is Postgres's default access method, and "asc" / "nulls last" are the
+// btree defaults per key ("nulls first" when descending). Introspection reports
+// these explicitly while source models leave them undefined; normalize both
+// sides or every default index churns (drop + re-create) on every diff.
+const normalizeIndexMethod = (method: string | null | undefined): string | null =>
+  method === undefined || method === null || method === "btree" ? null : method
+
+const normalizeIndexKeyOrder = (order: string | null | undefined): string =>
+  order ?? "asc"
+
+const normalizeIndexKeyNulls = (
+  nulls: string | null | undefined,
+  order: string | null | undefined
+): string => nulls ?? (normalizeIndexKeyOrder(order) === "desc" ? "first" : "last")
+
 const indexSignature = (
   table: TableModel,
   option: Extract<TableOptionSpec, { readonly kind: "index" }>
@@ -217,7 +232,7 @@ const indexSignature = (
     kind: option.kind,
     name: effectiveIndexName(table, option),
     unique: option.unique ?? false,
-    method: option.method ?? null,
+    method: normalizeIndexMethod(option.method),
     include: option.include ?? [],
     predicate: normalizedPredicateSql(option.predicate),
     keys: indexKeysOf(option)
@@ -226,8 +241,8 @@ const indexSignature = (
           return {
             kind: key.kind,
             column: key.column,
-            order: key.order ?? null,
-            nulls: key.nulls ?? null,
+            order: normalizeIndexKeyOrder(key.order),
+            nulls: normalizeIndexKeyNulls(key.nulls, key.order),
             operatorClass: key.operatorClass ?? null,
             collation: key.collation ?? null
           }
@@ -239,8 +254,8 @@ const indexSignature = (
         return {
           kind: key.kind,
           expression,
-          order: key.order ?? null,
-          nulls: key.nulls ?? null,
+          order: normalizeIndexKeyOrder(key.order),
+          nulls: normalizeIndexKeyNulls(key.nulls, key.order),
           operatorClass: key.operatorClass ?? null,
           collation: key.collation ?? null
         }
@@ -296,7 +311,7 @@ const indexShapeSignature = (
   JSON.stringify({
     kind: option.kind,
     unique: option.unique ?? false,
-    method: option.method ?? null,
+    method: normalizeIndexMethod(option.method),
     include: option.include ?? [],
     predicate: normalizedPredicateSql(option.predicate),
     keys: indexKeysOf(option)
@@ -305,8 +320,8 @@ const indexShapeSignature = (
           return {
             kind: key.kind,
             column: key.column,
-            order: key.order ?? null,
-            nulls: key.nulls ?? null,
+            order: normalizeIndexKeyOrder(key.order),
+            nulls: normalizeIndexKeyNulls(key.nulls, key.order),
             operatorClass: key.operatorClass ?? null,
             collation: key.collation ?? null
           }
@@ -318,8 +333,8 @@ const indexShapeSignature = (
         return {
           kind: key.kind,
           expression,
-          order: key.order ?? null,
-          nulls: key.nulls ?? null,
+          order: normalizeIndexKeyOrder(key.order),
+          nulls: normalizeIndexKeyNulls(key.nulls, key.order),
           operatorClass: key.operatorClass ?? null,
           collation: key.collation ?? null
         }

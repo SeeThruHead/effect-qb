@@ -2454,4 +2454,51 @@ export const users = (() => Table.make("users", {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
+
+  test("schema diff treats explicit btree index defaults as the source model's omissions", () => {
+    const makeUsers = (indexOption: Record<string, unknown>) => {
+      const users = StdRoot.Table.make("users", {
+        id: StdRoot.Column.uuid().pipe(StdRoot.Column.primaryKey),
+        email: StdRoot.Column.text()
+      })
+      ;(users as any)[StdRoot.Table.OptionsSymbol] = [
+        ...(users as any)[StdRoot.Table.OptionsSymbol],
+        indexOption
+      ]
+      return users
+    }
+    const asModel = (table: unknown): SchemaModel => ({
+      dialect: "postgres",
+      enums: [],
+      tables: [toTableModel(table as Parameters<typeof toTableModel>[0])]
+    })
+
+    const source = asModel(
+      makeUsers({ kind: "index", keys: [{ kind: "column", column: "email" }] })
+    )
+    // Introspection reports the access method and btree key defaults explicitly.
+    const database = asModel(
+      makeUsers({
+        kind: "index",
+        method: "btree",
+        keys: [{ kind: "column", column: "email", order: "asc", nulls: "last" }]
+      })
+    )
+
+    expect(planPostgresSchemaDiff(source, database).changes).toEqual([])
+
+    const descSource = asModel(
+      makeUsers({ kind: "index", keys: [{ kind: "column", column: "email", order: "desc" }] })
+    )
+    // Postgres defaults descending keys to nulls first.
+    const descDatabase = asModel(
+      makeUsers({
+        kind: "index",
+        method: "btree",
+        keys: [{ kind: "column", column: "email", order: "desc", nulls: "first" }]
+      })
+    )
+
+    expect(planPostgresSchemaDiff(descSource, descDatabase).changes).toEqual([])
+  })
 })
