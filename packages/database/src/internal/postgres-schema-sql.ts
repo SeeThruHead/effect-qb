@@ -313,11 +313,16 @@ export const renderIndexDefinition = (
   return `create${option.unique ? " unique" : ""} index ${quote(name)} on ${qualify(table.schemaName, table.name)}${renderIndexMethod(option.method)} (${renderedKeys})${includeColumns.length > 0 ? ` include (${includeColumns.map(quote).join(", ")})` : ""}${renderOptionalIndexPredicate(option.predicate)}`
 }
 
-export const renderCreateTable = (table: TableModel): string => {
+export const renderCreateTable = (
+  table: TableModel,
+  options?: { readonly includeForeignKeys?: boolean }
+): string => {
+  const includeForeignKeys = options?.includeForeignKeys ?? true
   const definitions = [
     ...table.columns.map(renderColumnDefinition),
     ...(table.options as readonly unknown[])
       .filter(isKnownConstraintOption)
+      .filter((option) => includeForeignKeys || option.kind !== "foreignKey")
       .map((option) => renderConstraint(table, option))
   ]
   return `create table ${qualify(table.schemaName, table.name)} (${definitions.join(", ")})`

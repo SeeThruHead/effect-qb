@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+### Fixes
+
+- fix(database): emit foreign keys as separate changes when creating tables
+
 ## 4.0.0-beta.92 - 2026-06-30
 
 ### Chores

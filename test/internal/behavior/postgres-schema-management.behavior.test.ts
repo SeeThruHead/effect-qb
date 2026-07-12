@@ -2454,4 +2454,45 @@ export const users = (() => Table.make("users", {
       await rm(tempDir, { recursive: true, force: true })
     }
   })
+
+  test("new tables are created without inline foreign keys, added as later constraints", () => {
+    // Anti-alphabetical dependency: "comments" references "users" but sorts first.
+    const users = StdRoot.Table.make("users", {
+      id: StdRoot.Column.uuid().pipe(StdRoot.Column.primaryKey)
+    })
+    const comments = StdRoot.Table.make("comments", {
+      id: StdRoot.Column.uuid().pipe(StdRoot.Column.primaryKey),
+      authorId: StdRoot.Column.uuid()
+    })
+    ;(comments as any)[StdRoot.Table.OptionsSymbol] = [
+      ...(comments as any)[StdRoot.Table.OptionsSymbol],
+      {
+        kind: "foreignKey",
+        columns: ["authorId"],
+        references: { tableName: "users", columns: ["id"], knownColumns: ["id"] }
+      }
+    ]
+
+    const source: SchemaModel = {
+      dialect: "postgres",
+      enums: [],
+      tables: [users, comments].map((table) =>
+        toTableModel(table as unknown as Parameters<typeof toTableModel>[0])
+      )
+    }
+    const database: SchemaModel = { dialect: "postgres", enums: [], tables: [] }
+
+    const plan = planPostgresSchemaDiff(source, database)
+    const kinds = plan.changes.map((change) => change.kind)
+
+    for (const change of plan.changes.filter((entry) => entry.kind === "createTable")) {
+      expect(change.sql ?? "").not.toContain("references")
+    }
+
+    const lastCreateTable = kinds.lastIndexOf("createTable")
+    const addConstraint = kinds.indexOf("addConstraint")
+    expect(addConstraint).toBeGreaterThan(lastCreateTable)
+    expect(plan.changes[addConstraint]?.sql ?? "").toContain("foreign key")
+    expect(plan.changes[addConstraint]?.sql ?? "").toContain("references")
+  })
 })

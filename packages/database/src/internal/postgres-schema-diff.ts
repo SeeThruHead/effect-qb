@@ -915,11 +915,31 @@ export const planPostgresSchemaDiff = (
         kind: "createTable",
         key,
         summary: `create table ${key}`,
-        sql: renderCreateTable(table),
+        // Foreign keys are added as separate addConstraint changes below. The
+        // change ordering sorts createTable alphabetically, so an inline
+        // "references" clause can point at a table that does not exist yet;
+        // addConstraint changes sort after every createTable, which also makes
+        // circular references work.
+        sql: renderCreateTable(table, { includeForeignKeys: false }),
         rollbackSql: renderDropTable(table),
         safe: true,
         destructive: false
       }))
+      for (const option of filterConstraints(table)) {
+        if (option.kind !== "foreignKey") {
+          continue
+        }
+        const constraintName = effectiveConstraintName(table, option)
+        changes.push(makeChange({
+          kind: "addConstraint",
+          key: `${key}.${constraintName}`,
+          summary: `add constraint ${key}.${constraintName}`,
+          sql: renderAddConstraint(table, option),
+          rollbackSql: renderDropConstraint(table, option),
+          safe: true,
+          destructive: false
+        }))
+      }
       for (const option of filterIndexes(table)) {
         changes.push(makeChange({
           kind: "createIndex",
